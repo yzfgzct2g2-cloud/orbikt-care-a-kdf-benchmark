@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>Task 8 device KDF calibration</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="intro">
+        <p class="eyebrow">Orbikt-care-A · synthetic benchmark</p>
+        <h1>Task 8 device KDF calibration</h1>
+        <p>
+          This page measures browser Web Crypto only. It does not open app data,
+          save results, send results, or choose a production encryption profile.
+        </p>
+      </header>
+
+      <section class="card" aria-labelledby="environment-heading">
+        <h2 id="environment-heading">Environment</h2>
+        <dl id="environment" class="metadata-grid"></dl>
+        <p class="notice">
+          Use Session 1 and Session 2 independently on the same device. Keep the
+          tab visible and note power, thermal, and competing-workload conditions.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="protocol-heading">
+        <h2 id="protocol-heading">Protocol</h2>
+        <ul class="protocol-list">
+          <li>PBKDF2 / HMAC-SHA-256 → non-extractable AES-GCM 256-bit key</li>
+          <li>Fresh synthetic 32-byte input and fresh 16-byte salt per derivation</li>
+          <li>5 unrecorded warmups, then 25 sequential recorded runs per candidate</li>
+          <li>Candidates: 300,000 · 600,000 · 1,200,000 iterations</li>
+          <li>Timing boundary: awaited <code>subtle.deriveKey</code> only</li>
+        </ul>
+      </section>
+
+      <section class="card" aria-labelledby="run-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="run-heading">Run sessions</h2>
+            <p id="status" role="status" aria-live="polite">Ready. No data has been stored or transmitted.</p>
+          </div>
+          <div class="actions" aria-label="Benchmark actions">
+            <button id="run-session-1" type="button">Run Session 1</button>
+            <button id="run-session-2" type="button" disabled>Run Session 2</button>
+          </div>
+        </div>
+        <progress id="progress" max="90" value="0" aria-label="Benchmark progress"></progress>
+        <p id="progress-label" class="progress-label">0 / 90 derivations complete</p>
+        <div id="results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="export-heading">
+        <h2 id="export-heading">Manual export</h2>
+        <p>
+          Review the local JSON below, then explicitly download it or select and
+          copy it. This page never uploads it.
+        </p>
+        <textarea id="export-json" rows="10" readonly aria-label="Benchmark JSON export"></textarea>
+        <button id="download-json" type="button" disabled>Download JSON</button>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        BENCHMARK_CONFIG,
+        createRunController,
+        runSession,
+      } from './benchmark.mjs'
+
+      const sessionResults = []
+      const environment = {
+        browser: navigator.userAgent,
+        platform: navigator.platform || 'unavailable',
+        language: navigator.language || 'unavailable',
+        hardwareConcurrency: navigator.hardwareConcurrency || 'unavailable',
+        deviceMemory: navigator.deviceMemory || 'unavailable',
+        secureContext: globalThis.isSecureContext,
+        origin: location.origin,
+      }
+      const elements = {
+        environment: document.querySelector('#environment'),
+        status: document.querySelector('#status'),
+        progress: document.querySelector('#progress'),
+        progressLabel: document.querySelector('#progress-label'),
+        results: document.querySelector('#results'),
+        exportJson: document.querySelector('#export-json'),
+        downloadJson: document.querySelector('#download-json'),
+        session1: document.querySelector('#run-session-1'),
+        session2: document.querySelector('#run-session-2'),
+      }
+
+      const setText = (element, value) => {
+        element.textContent = String(value)
+      }
+
+      const appendMetadata = () => {
+        for (const [name, value] of Object.entries(environment)) {
+          const term = document.createElement('dt')
+          const detail = document.createElement('dd')
+          setText(term, name)
+          setText(detail, value)
+          elements.environment.append(term, detail)
+        }
+      }
+
+      const safeErrorCode = (error) => {
+        const code = error instanceof Error ? error.message : ''
+        return /^[A-Z_]+$/.test(code) ? code : 'BENCHMARK_FAILED'
+      }
+
+      const resultPayload = () => ({
+        artifact: 'orbikt-care-a-task8-device-kdf',
+        protocol: BENCHMARK_CONFIG,
+        environment,
+        sessions: sessionResults,
+      })
+
+      const renderExport = () => {
+        const payload = resultPayload()
+        elements.exportJson.value = JSON.stringify(payload, null, 2)
+        elements.downloadJson.disabled = sessionResults.length === 0
+      }
+
+      const renderResults = () => {
+        elements.results.replaceChildren()
+        for (const session of sessionResults) {
+          const wrapper = document.createElement('article')
+          wrapper.className = 'session-result'
+          const heading = document.createElement('h3')
+          setText(heading, session.session)
+          wrapper.append(heading)
+
+          for (const candidate of session.candidates) {
+            const candidateBlock = document.createElement('div')
+            candidateBlock.className = 'candidate-result'
+            const candidateHeading = document.createElement('h4')
+            setText(candidateHeading, `${candidate.iterations.toLocaleString()} iterations`)
+            const stats = document.createElement('p')
+            setText(stats, candidate.failures.length === 0
+              ? `median ${candidate.medianMs.toFixed(3)} ms · p95 ${candidate.p95Ms.toFixed(3)} ms · min ${candidate.minMs.toFixed(3)} ms · max ${candidate.maxMs.toFixed(3)} ms`
+              : `${candidate.failures.length} failure(s); successful samples: ${candidate.samplesMs.length}`)
+            const raw = document.createElement('p')
+            raw.className = 'raw-samples'
+            setText(raw, `Raw samples (ms): ${candidate.samplesMs.map((sample) => sample.toFixed(3)).join(', ') || 'none'}`)
+            candidateBlock.append(candidateHeading, stats, raw)
+            if (candidate.failures.length > 0) {
+              const failures = document.createElement('p')
+              failures.className = 'failure'
+              setText(failures, `Failures: ${candidate.failures.map(({ phase, run, errorName }) => `${phase} ${run}: ${errorName}`).join('; ')}`)
+              candidateBlock.append(failures)
+            }
+            wrapper.append(candidateBlock)
+          }
+          elements.results.append(wrapper)
+        }
+      }
+
+      const controller = createRunController(async (sessionName) => {
+        elements.session1.disabled = true
+        elements.session2.disabled = true
+        elements.downloadJson.disabled = true
+        elements.progress.value = 0
+        setText(elements.progressLabel, '0 / 90 derivations complete')
+        setText(elements.status, `${sessionName} running locally…`)
+
+        try {
+          const result = await runSession({
+            onProgress: ({ candidateIndex, run, totalRuns }) => {
+              const completed = candidateIndex * totalRuns + run
+              elements.progress.value = completed
+              setText(elements.progressLabel, `${completed} / 90 derivations complete`)
+            },
+          })
+          sessionResults.push({ session: sessionName, ...result, environment })
+          renderResults()
+          renderExport()
+          setText(elements.status, `${sessionName} complete. Results remain local.`)
+        } catch (error) {
+          setText(elements.status, `${sessionName} stopped safely: ${safeErrorCode(error)}`)
+        } finally {
+          elements.session1.disabled = false
+          elements.session2.disabled = sessionResults.every(({ session }) => session !== 'Session 1')
+          elements.downloadJson.disabled = sessionResults.length === 0
+        }
+      })
+
+      elements.session1.addEventListener('click', () => controller.run('Session 1'))
+      elements.session2.addEventListener('click', () => controller.run('Session 2'))
+      elements.downloadJson.addEventListener('click', () => {
+        const blob = new Blob([elements.exportJson.value], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = 'orbikt-care-a-task8-device-kdf.json'
+        anchor.click()
+        URL.revokeObjectURL(url)
+      })
+
+      appendMetadata()
+      renderExport()
+      window.task8Benchmark = {
+        runSession: (sessionName) => controller.run(sessionName),
+        getExport: resultPayload,
+      }
+    </script>
+  </body>
+</html>
