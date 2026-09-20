@@ -1,4 +1,4 @@
-name: Publish synthetic KDF benchmark
+name: Publish synthetic KDF benchmark and Orbikt-care-A mobile preview
 
 on:
   push:
@@ -22,17 +22,28 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout benchmark repository
+      - name: Checkout public staging repository
         uses: actions/checkout@v4
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload benchmark artifact only
+      - name: Assemble Pages site
+        shell: bash
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          cp -a benchmark/. _site/
+          if [ -d mobile-preview ]; then
+            mkdir -p _site/mobile-preview
+            cp -a mobile-preview/. _site/mobile-preview/
+          fi
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: benchmark
+          path: _site
 
-      - name: Deploy benchmark artifact
+      - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
