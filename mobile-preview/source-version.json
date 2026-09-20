@@ -1,0 +1,9 @@
+{
+  "source_repository": "yzfgzct2g2-cloud/Orbikt-care-A",
+  "source_branch": "release/orbikt-care-a-v1",
+  "source_commit": "2400571fabf19505daa16a20bc28ba406e796b6a",
+  "preview_path": "/orbikt-care-a-kdf-benchmark/mobile-preview/",
+  "service_worker_enabled": false,
+  "qa_preview_only": true,
+  "built_at_utc": "2026-09-20T03:45:22.203711+00:00"
+}
